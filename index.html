@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Patient Safety Reports Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: #f0f4f8;
+    color: #1a202c;
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(135deg, #1a365d 0%, #2a4a7f 100%);
+    color: white;
+    padding: 1.5rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  header svg { width: 40px; height: 40px; }
+  header h1 { font-size: 1.5rem; font-weight: 700; }
+  header p { font-size: 0.85rem; opacity: 0.8; margin-top: 2px; }
+  .upload-zone {
+    max-width: 700px;
+    margin: 3rem auto;
+    background: white;
+    border: 2px dashed #a0aec0;
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: #2a4a7f; background: #ebf4ff; }
+  .upload-zone svg { width: 60px; height: 60px; color: #a0aec0; margin-bottom: 1rem; }
+  .upload-zone h2 { font-size: 1.2rem; color: #2d3748; margin-bottom: 0.5rem; }
+  .upload-zone p { color: #718096; font-size: 0.9rem; }
+  .upload-zone input { display: none; }
+  .btn-upload {
+    display: inline-block;
+    margin-top: 1.5rem;
+    background: #2a4a7f;
+    color: white;
+    padding: 0.7rem 2rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+  }
+  .btn-upload:hover { background: #1a365d; }
+  #dashboard { display: none; padding: 1.5rem 2rem 3rem; max-width: 1400px; margin: 0 auto; }
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .top-bar h2 { font-size: 1.3rem; color: #1a365d; }
+  .btn-reset {
+    background: #e53e3e;
+    color: white;
+    padding: 0.5rem 1.2rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .btn-reset:hover { background: #c53030; }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .kpi-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border-top: 4px solid #2a4a7f;
+  }
+  .kpi-card.green { border-top-color: #38a169; }
+  .kpi-card.orange { border-top-color: #dd6b20; }
+  .kpi-card.red { border-top-color: #e53e3e; }
+  .kpi-card.purple { border-top-color: #805ad5; }
+  .kpi-card .label { font-size: 0.78rem; color: #718096; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .kpi-card .value { font-size: 2rem; font-weight: 700; color: #1a202c; }
+  .kpi-card .sub { font-size: 0.78rem; color: #a0aec0; margin-top: 4px; }
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .chart-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .chart-card h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .chart-card h3 span { font-size: 1.1rem; }
+  .chart-wrapper { position: relative; width: 100%; }
+  .wide { grid-column: 1 / -1; }
+  .insights-box {
+    background: #ebf8ff;
+    border: 1px solid #bee3f8;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .insights-box h3 { font-size: 1rem; font-weight: 700; color: #2b6cb0; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+  .insights-box ul { list-style: none; padding: 0; }
+  .insights-box li { padding: 0.5rem 0; font-size: 0.9rem; color: #2d3748; border-bottom: 1px solid #bee3f8; display: flex; align-items: flex-start; gap: 0.5rem; }
+  .insights-box li:last-child { border-bottom: none; }
+  .insights-box li::before { content: "•"; color: #2b6cb0; font-weight: bold; flex-shrink: 0; margin-top: 1px; }
+  .issues-box {
+    background: #fff5f5;
+    border: 1px solid #fed7d7;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .issues-box h3 { font-size: 1rem; font-weight: 700; color: #c53030; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+  .issues-box ul { list-style: none; padding: 0; }
+  .issues-box li { padding: 0.5rem 0; font-size: 0.9rem; color: #2d3748; border-bottom: 1px solid #fed7d7; display: flex; align-items: flex-start; gap: 0.5rem; }
+  .issues-box li:last-child { border-bottom: none; }
+  .issues-box li::before { content: "⚠"; color: #e53e3e; flex-shrink: 0; }
+  .recs-box {
+    background: #f0fff4;
+    border: 1px solid #9ae6b4;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .recs-box h3 { font-size: 1rem; font-weight: 700; color: #276749; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+  .recs-box ul { list-style: none; padding: 0; }
+  .recs-box li { padding: 0.5rem 0; font-size: 0.9rem; color: #2d3748; border-bottom: 1px solid #9ae6b4; display: flex; align-items: flex-start; gap: 0.5rem; }
+  .recs-box li:last-child { border-bottom: none; }
+  .recs-box li::before { content: "✓"; color: #38a169; font-weight: bold; flex-shrink: 0; margin-top: 1px; }
+  .reporters-table-wrap { overflow-x: auto; margin-top: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { background: #2a4a7f; color: white; padding: 0.6rem 0.8rem; text-align: right; font-weight: 600; font-size: 0.8rem; }
+  td { padding: 0.55rem 0.8rem; border-bottom: 1px solid #e2e8f0; color: #2d3748; }
+  tr:hover td { background: #f7fafc; }
+  tr:nth-child(even) td { background: #f7fafc; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+  .badge-blue { background: #bee3f8; color: #2b6cb0; }
+  .badge-green { background: #c6f6d5; color: #276749; }
+  .badge-orange { background: #feebc8; color: #c05621; }
+  .badge-red { background: #fed7d7; color: #c53030; }
+  .badge-gray { background: #e2e8f0; color: #4a5568; }
+  .filter-bar {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    background: white;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    align-items: flex-end;
+  }
+  .filter-bar label { font-size: 0.78rem; color: #718096; display: block; margin-bottom: 4px; }
+  .filter-bar select { padding: 0.4rem 0.8rem; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; background: white; color: #2d3748; cursor: pointer; min-width: 150px; }
+  .filter-bar select:focus { outline: 2px solid #2a4a7f; }
+  footer { text-align: center; padding: 1.5rem; font-size: 0.8rem; color: #a0aec0; border-top: 1px solid #e2e8f0; margin-top: 2rem; }
+  .loading { text-align: center; padding: 3rem; color: #718096; font-size: 1rem; }
+  @media (max-width: 600px) {
+    header { flex-direction: column; text-align: center; }
+    #dashboard { padding: 1rem; }
+    .charts-grid { grid-template-columns: 1fr; }
+    .filter-bar { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="40" height="40" rx="8" fill="rgba(255,255,255,0.2)"/>
+    <path d="M20 8L8 14v12l12 6 12-6V14L20 8z" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M20 8v18M8 14l12 6 12-6" stroke="white" stroke-width="1.5"/>
+    <path d="M17 18h6M20 15v6" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  </svg>
+  <div>
+    <h1>Patient Safety Reports Dashboard</h1>
+    <p>Quality & Patient Safety — Pharmacy & Other Departments</p>
+  </div>
+</header>
+
+<div id="uploadSection">
+  <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M12 16V8m0 0l-3 3m3-3l3 3" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20.25 14.5v3.75a2 2 0 01-2 2H5.75a2 2 0 01-2-2V14.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 9l2.5-5.5h11L20 9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h2>ارفع ملف Excel الخاص بتقارير السلامة</h2>
+    <p>اسحب الملف هنا أو اضغط للاختيار</p>
+    <p style="font-size:0.8rem;color:#a0aec0;margin-top:0.5rem;">يدعم .xlsx و .xls</p>
+    <button class="btn-upload" onclick="event.stopPropagation();document.getElementById('fileInput').click()">اختر ملف Excel</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(this)">
+  </div>
+</div>
+
+<div id="dashboard">
+  <div class="top-bar">
+    <div>
+      <h2 id="dashTitle">لوحة تحليل تقارير السلامة</h2>
+      <p id="dashSubtitle" style="font-size:0.82rem;color:#718096;margin-top:3px;"></p>
+    </div>
+    <button class="btn-reset" onclick="resetDashboard()">↩ رفع ملف جديد</button>
+  </div>
+
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="filter-bar">
+    <div><label>المصدر / Facility</label><select id="filterFacility" onchange="applyFilters()"><option value="all">الكل</option></select></div>
+    <div><label>الوحدة / Unit</label><select id="filterUnit" onchange="applyFilters()"><option value="all">الكل</option></select></div>
+    <div><label>السنة / Year</label><select id="filterYear" onchange="applyFilters()"><option value="all">الكل</option></select></div>
+    <div><label>الفئة / Category</label><select id="filterCategory" onchange="applyFilters()"><option value="all">الكل</option></select></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h3><span>📅</span> Number of Safety Reports by Month</h3>
+      <div class="chart-wrapper" style="height:260px"><canvas id="chartMonthly" role="img" aria-label="Monthly safety reports count"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3><span>🏥</span> Reports by Facility (From Pharmacy / By Other Dept)</h3>
+      <div class="chart-wrapper" style="height:260px"><canvas id="chartFacility" role="img" aria-label="Reports by facility"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3><span>🌙</span> Number of Safety Reports by Shift</h3>
+      <div class="chart-wrapper" style="height:260px"><canvas id="chartShift" role="img" aria-label="Reports by shift"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3><span>⚠️</span> Incident Category Distribution</h3>
+      <div class="chart-wrapper" style="height:260px"><canvas id="chartCategory" role="img" aria-label="Incident categories"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3><span>🩺</span> Level of Harm Distribution</h3>
+      <div class="chart-wrapper" style="height:260px"><canvas id="chartHarm" role="img" aria-label="Level of harm"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3><span>💊</span> Medication Error Stage</h3>
+      <div class="chart-wrapper" style="height:260px"><canvas id="chartMedStage" role="img" aria-label="Medication error stage"></canvas></div>
+    </div>
+    <div class="chart-card wide">
+      <h3><span>👤</span> Top Reporters (Reporter Name & Count)</h3>
+      <div class="chart-wrapper" id="reportersChartWrap" style="height:320px"><canvas id="chartReporters" role="img" aria-label="Top reporters"></canvas></div>
+    </div>
+    <div class="chart-card wide">
+      <h3><span>📊</span> Reports per Unit / Location</h3>
+      <div class="chart-wrapper" id="unitChartWrap" style="height:320px"><canvas id="chartUnit" role="img" aria-label="Reports per unit"></canvas></div>
+    </div>
+    <div class="chart-card wide">
+      <h3><span>🔬</span> Specific Incident Type Breakdown</h3>
+      <div class="chart-wrapper" id="incidentChartWrap" style="height:320px"><canvas id="chartIncidentType" role="img" aria-label="Specific incident types"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3><span>✅</span> Good Catch vs Regular Reports</h3>
+      <div class="chart-wrapper" style="height:260px"><canvas id="chartGoodCatch" role="img" aria-label="Good catch vs regular"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3><span>📋</span> Report Status</h3>
+      <div class="chart-wrapper" style="height:260px"><canvas id="chartStatus" role="img" aria-label="Report status"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="margin-bottom:2rem;">
+    <h3><span>👥</span> Pharmacist / Reporter Details</h3>
+    <div class="reporters-table-wrap">
+      <table id="reportersTable">
+        <thead>
+          <tr><th>#</th><th>اسم المبلِّغ</th><th>عدد التقارير</th><th>الوحدة</th><th>الفئة الأكثر إبلاغاً</th><th>المصدر</th></tr>
+        </thead>
+        <tbody id="reportersTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="insights-box">
+    <h3>💡 ملاحظات تحليلية — Key Insights</h3>
+    <ul id="insightsList"></ul>
+  </div>
+  <div class="issues-box">
+    <h3>🚨 المشكلات المكتشفة — Issues Identified</h3>
+    <ul id="issuesList"></ul>
+  </div>
+  <div class="recs-box">
+    <h3>✅ توصيات التحسين — Improvement Recommendations</h3>
+    <ul id="recsList"></ul>
+  </div>
+</div>
+
+<footer>Patient Safety Reports Dashboard — Quality Department | Built for Educational Sharing</footer>
+
+<script>
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTH_NAMES_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const COLORS = ['#2a4a7f','#38a169','#dd6b20','#e53e3e','#805ad5','#0bc5ea','#d69e2e','#f687b3','#4fd1c5','#f6ad55','#68d391','#fc8181'];
+const HARM_COLORS = { 'no harm':'#38a169','minor':'#d69e2e','moderate':'#dd6b20','major':'#e53e3e','catastrophic':'#742a2a','near miss':'#805ad5','good catch':'#0bc5ea' };
+
+let rawData = [], filteredData = [], chartInstances = {};
+
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); const f = e.dataTransfer.files[0]; if (f) processFile(f); });
+
+function handleFile(input) { if (input.files[0]) processFile(input.files[0]); }
+
+function processFile(file) {
+  dz.innerHTML = '<div class="loading">⏳ جاري تحليل البيانات...</div>';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rawData = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      filteredData = [...rawData];
+      populateFilters();
+      renderDashboard(file.name);
+    } catch(err) { alert('خطأ في قراءة الملف: ' + err.message); location.reload(); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function normalizeKey(str) { return str.toLowerCase().replace(/\s+/g,'').replace(/[^a-z0-9]/g,''); }
+
+function getField(row, ...names) {
+  for (const n of names) { if (row[n] !== undefined && row[n] !== '') return String(row[n]).trim(); }
+  const keys = Object.keys(row);
+  for (const n of names) {
+    const norm = normalizeKey(n);
+    const k = keys.find(k2 => normalizeKey(k2).includes(norm.substring(0,6)));
+    if (k && row[k] !== '' && row[k] !== undefined) return String(row[k]).trim();
+  }
+  return '';
+}
+
+function parseDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  const d = new Date(String(val).trim());
+  return isNaN(d) ? null : d;
+}
+
+function getShift(row) {
+  const timeStr = getField(row, 'Time', 'Shift', 'ShiftTime', 'Occurrence Time', 'OccurrenceTime');
+  if (timeStr) {
+    const t = timeStr.toLowerCase();
+    if (t.includes('day') || t.includes('صباح')) return 'Day Shift (07:00-19:00)';
+    if (t.includes('night') || t.includes('ليل') || t.includes('evening') || t.includes('مساء')) return 'Night Shift (19:00-07:00)';
+    const h = parseInt(t.split(':')[0]);
+    if (!isNaN(h)) {
+      if (h >= 7 && h < 19) return 'Day Shift (07:00-19:00)';
+      return 'Night Shift (19:00-07:00)';
+    }
+  }
+  return 'Not Specified';
+}
+
+function getFacility(row) {
+  return getField(row, 'From Pharmacy / By Other Department', 'From Pharmacy', 'Facility', 'By Other Department', 'Department') || 'Unknown';
+}
+
+function populateFilters() {
+  const facilities = [...new Set(rawData.map(r => getFacility(r)).filter(Boolean))].sort();
+  const units = [...new Set(rawData.map(r => getField(r,'Occurrence Unit','Reporting Unit','Unit','OccurrenceUnit','ReportingUnit','Tid Occurrence Unit','TidOccurrenceUnit')).filter(Boolean))].sort();
+  const years = [...new Set(rawData.map(r => { const d = parseDate(getField(r,'Event Date','Incident Date','Date','EventDate','IncidentDate')); return d ? d.getFullYear() : null; }).filter(Boolean))].sort();
+  const cats = [...new Set(rawData.map(r => getField(r,'Incident Category','IncidentCategory','Category')).filter(Boolean))].sort();
+  setOptions('filterFacility', facilities);
+  setOptions('filterUnit', units);
+  setOptions('filterYear', years);
+  setOptions('filterCategory', cats);
+}
+
+function setOptions(id, vals) {
+  const sel = document.getElementById(id);
+  while (sel.options.length > 1) sel.remove(1);
+  vals.forEach(v => { const o = document.createElement('option'); o.value = v; o.text = v; sel.add(o); });
+}
+
+function applyFilters() {
+  const facility = document.getElementById('filterFacility').value;
+  const unit = document.getElementById('filterUnit').value;
+  const year = document.getElementById('filterYear').value;
+  const category = document.getElementById('filterCategory').value;
+  filteredData = rawData.filter(r => {
+    if (facility !== 'all' && getFacility(r) !== facility) return false;
+    const u = getField(r,'Occurrence Unit','Reporting Unit','Unit','OccurrenceUnit','ReportingUnit','Tid Occurrence Unit');
+    if (unit !== 'all' && u !== unit) return false;
+    if (year !== 'all') { const d = parseDate(getField(r,'Event Date','Incident Date','Date','EventDate','IncidentDate')); if (!d || String(d.getFullYear()) !== year) return false; }
+    const cat = getField(r,'Incident Category','IncidentCategory','Category');
+    if (category !== 'all' && cat !== category) return false;
+    return true;
+  });
+  renderCharts(); renderKPIs(); renderReportersTable(); generateInsights();
+}
+
+function renderDashboard(fname) {
+  document.getElementById('uploadSection').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('dashSubtitle').textContent = `ملف: ${fname} | إجمالي السجلات: ${rawData.length}`;
+  filteredData = [...rawData];
+  renderKPIs(); renderCharts(); renderReportersTable(); generateInsights();
+}
+
+function resetDashboard() {
+  rawData = []; filteredData = [];
+  Object.values(chartInstances).forEach(c => c && c.destroy());
+  chartInstances = {};
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('uploadSection').style.display = 'block';
+  document.getElementById('dropZone').innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M12 16V8m0 0l-3 3m3-3l3 3" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20.25 14.5v3.75a2 2 0 01-2 2H5.75a2 2 0 01-2-2V14.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 9l2.5-5.5h11L20 9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h2>ارفع ملف Excel الخاص بتقارير السلامة</h2>
+    <p>اسحب الملف هنا أو اضغط للاختيار</p>
+    <p style="font-size:0.8rem;color:#a0aec0;margin-top:0.5rem;">يدعم .xlsx و .xls</p>
+    <button class="btn-upload" onclick="event.stopPropagation();document.getElementById('fileInput').click()">اختر ملف Excel</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(this)">`;
+  document.getElementById('fileInput').onchange = e => handleFile(e.target);
+}
+
+function count(data, fn) {
+  const m = {};
+  data.forEach(r => { const k = fn(r); if (k) m[k] = (m[k]||0)+1; });
+  return m;
+}
+
+function sortedEntries(obj, limit=0) {
+  let e = Object.entries(obj).sort((a,b) => b[1]-a[1]);
+  return limit ? e.slice(0, limit) : e;
+}
+
+function renderKPIs() {
+  const total = filteredData.length;
+  const pharmacy = filteredData.filter(r => getFacility(r).toLowerCase().includes('pharmacy') || getFacility(r).includes('صيدل')).length;
+  const goodCatch = filteredData.filter(r => { const gc = getField(r,'Good Catch','GoodCatch').toLowerCase(); return gc==='yes'||gc==='نعم'||gc==='true'||gc==='1'; }).length;
+  const medErr = filteredData.filter(r => { const cat = getField(r,'Incident Category','IncidentCategory','Category').toLowerCase(); return cat.includes('medication')||cat.includes('دواء')||cat.includes('med'); }).length;
+  const reporters = Object.keys(count(filteredData, r => getField(r,'Reporter name','Reporter','ReporterName','Reported By'))).length;
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi-card"><div class="label">Total Reports</div><div class="value">${total}</div><div class="sub">إجمالي التقارير</div></div>
+    <div class="kpi-card green"><div class="label">From Pharmacy</div><div class="value">${pharmacy}</div><div class="sub">${total?Math.round(pharmacy/total*100):0}% من الكل</div></div>
+    <div class="kpi-card orange"><div class="label">Medication Errors</div><div class="value">${medErr}</div><div class="sub">أخطاء دوائية</div></div>
+    <div class="kpi-card purple"><div class="label">Good Catch</div><div class="value">${goodCatch}</div><div class="sub">اصطياد جيد</div></div>
+    <div class="kpi-card red"><div class="label">Unique Reporters</div><div class="value">${reporters}</div><div class="sub">عدد المُبلِّغين</div></div>`;
+}
+
+function destroyChart(id) { if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; } }
+function makeChart(id, config) { destroyChart(id); const ctx = document.getElementById(id); if (!ctx) return; chartInstances[id] = new Chart(ctx, config); }
+
+function renderCharts() {
+  // Monthly
+  const monthMap = {};
+  filteredData.forEach(r => {
+    const d = parseDate(getField(r,'Event Date','Incident Date','Date','EventDate','IncidentDate'));
+    if (d) { const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; monthMap[key] = (monthMap[key]||0)+1; }
+  });
+  const monthKeys = Object.keys(monthMap).sort();
+  const monthLabels = monthKeys.map(k => { const [y,m] = k.split('-'); return MONTH_NAMES[parseInt(m)-1]+' '+y; });
+  makeChart('chartMonthly', { type:'bar', data:{ labels:monthLabels, datasets:[{ label:'Reports', data:monthKeys.map(k=>monthMap[k]), backgroundColor:'#2a4a7f', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true, ticks:{ stepSize:1 } }, x:{ ticks:{ maxRotation:45, autoSkip:false } } } } });
+
+  // Facility
+  const facE = sortedEntries(count(filteredData, r => getFacility(r)));
+  makeChart('chartFacility', { type:'doughnut', data:{ labels:facE.map(e=>e[0]), datasets:[{ data:facE.map(e=>e[1]), backgroundColor:COLORS }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11 }, boxWidth:12 } } } } });
+
+  // Shift
+  const shiftE = sortedEntries(count(filteredData, r => getShift(r)));
+  makeChart('chartShift', { type:'pie', data:{ labels:shiftE.map(e=>e[0]), datasets:[{ data:shiftE.map(e=>e[1]), backgroundColor:['#2a4a7f','#dd6b20','#805ad5','#38a169'] }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11 }, boxWidth:12 } } } } });
+
+  // Category
+  const catE = sortedEntries(count(filteredData, r => getField(r,'Incident Category','IncidentCategory','Category')||'Unknown'), 10);
+  makeChart('chartCategory', { type:'bar', data:{ labels:catE.map(e=>e[0]), datasets:[{ label:'Count', data:catE.map(e=>e[1]), backgroundColor:COLORS }] }, options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{ beginAtZero:true } } } });
+
+  // Harm
+  const harmMap = count(filteredData, r => getField(r,'Incident Level of Harm','Level of Harm','LevelOfHarm','Harm Level','HarmLevel')||'Unknown');
+  const harmE = sortedEntries(harmMap);
+  const harmColors = harmE.map(e => { const lc = e[0].toLowerCase(); for (const [k,v] of Object.entries(HARM_COLORS)) { if (lc.includes(k)) return v; } return '#718096'; });
+  makeChart('chartHarm', { type:'doughnut', data:{ labels:harmE.map(e=>e[0]), datasets:[{ data:harmE.map(e=>e[1]), backgroundColor:harmColors }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11 }, boxWidth:12 } } } } });
+
+  // Medication Error Stage
+  const medE = sortedEntries(count(filteredData, r => getField(r,'Medication Error Stage','MedicationErrorStage','Med Error Stage')||'N/A'), 10);
+  makeChart('chartMedStage', { type:'bar', data:{ labels:medE.map(e=>e[0]), datasets:[{ label:'Count', data:medE.map(e=>e[1]), backgroundColor:'#805ad5', borderRadius:4 }] }, options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{ beginAtZero:true } } } });
+
+  // Top Reporters
+  const repE = sortedEntries(count(filteredData, r => getField(r,'Reporter name','Reporter','ReporterName','Reported By')||'Unknown'), 20);
+  document.getElementById('reportersChartWrap').style.height = Math.max(320, repE.length*35+60) + 'px';
+  makeChart('chartReporters', { type:'bar', data:{ labels:repE.map(e=>e[0]), datasets:[{ label:'Reports', data:repE.map(e=>e[1]), backgroundColor:'#2a4a7f', borderRadius:4 }] }, options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } } } });
+
+  // Unit
+  const unitE = sortedEntries(count(filteredData, r => getField(r,'Occurrence Unit','Reporting Unit','Unit','OccurrenceUnit','ReportingUnit','Tid Occurrence Unit')||'Unknown'), 20);
+  document.getElementById('unitChartWrap').style.height = Math.max(320, unitE.length*35+60) + 'px';
+  makeChart('chartUnit', { type:'bar', data:{ labels:unitE.map(e=>e[0]), datasets:[{ label:'Reports', data:unitE.map(e=>e[1]), backgroundColor:'#38a169', borderRadius:4 }] }, options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } } } });
+
+  // Incident Type
+  const incE = sortedEntries(count(filteredData, r => getField(r,'Specific Incident Type','SpecificIncidentType','Incident Type','IncidentType')||'Unknown'), 20);
+  document.getElementById('incidentChartWrap').style.height = Math.max(320, incE.length*35+60) + 'px';
+  makeChart('chartIncidentType', { type:'bar', data:{ labels:incE.map(e=>e[0]), datasets:[{ label:'Count', data:incE.map(e=>e[1]), backgroundColor:'#dd6b20', borderRadius:4 }] }, options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{ beginAtZero:true, ticks:{ stepSize:1 } } } } });
+
+  // Good Catch
+  const gcE = sortedEntries(count(filteredData, r => { const gc = getField(r,'Good Catch','GoodCatch').toLowerCase(); return (gc==='yes'||gc==='نعم'||gc==='true'||gc==='1') ? 'Good Catch ✓' : 'Regular Report'; }));
+  makeChart('chartGoodCatch', { type:'doughnut', data:{ labels:gcE.map(e=>e[0]), datasets:[{ data:gcE.map(e=>e[1]), backgroundColor:['#0bc5ea','#a0aec0'] }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ font:{ size:12 }, boxWidth:12 } } } } });
+
+  // Status
+  const statE = sortedEntries(count(filteredData, r => getField(r,'Status','Report Status','ReportStatus')||'Unknown'));
+  const statColors = statE.map(e => { const lc = e[0].toLowerCase(); if (lc.includes('close')||lc.includes('complete')||lc.includes('done')) return '#38a169'; if (lc.includes('open')||lc.includes('pending')||lc.includes('progress')) return '#dd6b20'; return '#718096'; });
+  makeChart('chartStatus', { type:'pie', data:{ labels:statE.map(e=>e[0]), datasets:[{ data:statE.map(e=>e[1]), backgroundColor:statColors }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11 }, boxWidth:12 } } } } });
+}
+
+function renderReportersTable() {
+  const repData = {};
+  filteredData.forEach(r => {
+    const name = getField(r,'Reporter name','Reporter','ReporterName','Reported By')||'Unknown';
+    const unit = getField(r,'Occurrence Unit','Reporting Unit','Unit','OccurrenceUnit','Tid Occurrence Unit')||'';
+    const cat = getField(r,'Incident Category','IncidentCategory','Category')||'';
+    const fac = getFacility(r);
+    if (!repData[name]) repData[name] = { count:0, units:{}, cats:{}, facilities:{} };
+    repData[name].count++;
+    if (unit) repData[name].units[unit] = (repData[name].units[unit]||0)+1;
+    if (cat) repData[name].cats[cat] = (repData[name].cats[cat]||0)+1;
+    repData[name].facilities[fac] = (repData[name].facilities[fac]||0)+1;
+  });
+  const sorted = Object.entries(repData).sort((a,b)=>b[1].count-a[1].count);
+  const bc = i => i===0?'badge-red':i===1?'badge-orange':i===2?'badge-blue':'badge-gray';
+  document.getElementById('reportersTableBody').innerHTML = sorted.map(([name,d],i) => `<tr>
+    <td>${i+1}</td>
+    <td style="font-weight:600">${name}</td>
+    <td><span class="badge ${bc(i)}">${d.count}</span></td>
+    <td>${sortedEntries(d.units)[0]?.[0]||'-'}</td>
+    <td style="font-size:0.8rem">${sortedEntries(d.cats)[0]?.[0]||'-'}</td>
+    <td style="font-size:0.8rem">${sortedEntries(d.facilities)[0]?.[0]||'-'}</td>
+  </tr>`).join('');
+}
+
+function generateInsights() {
+  const total = filteredData.length;
+  if (!total) return;
+  const monthMap = {};
+  filteredData.forEach(r => { const d = parseDate(getField(r,'Event Date','Incident Date','Date','EventDate','IncidentDate')); if (d) { const k = d.getMonth(); monthMap[k] = (monthMap[k]||0)+1; } });
+  const topMonth = sortedEntries(monthMap)[0];
+  const topRep = sortedEntries(count(filteredData, r => getField(r,'Reporter name','Reporter','ReporterName','Reported By')||'Unknown'))[0];
+  const catMap = count(filteredData, r => getField(r,'Incident Category','IncidentCategory','Category')||'Unknown');
+  const topCat = sortedEntries(catMap)[0];
+  const unitMap = count(filteredData, r => getField(r,'Occurrence Unit','Reporting Unit','Unit','OccurrenceUnit','Tid Occurrence Unit')||'Unknown');
+  const topUnit = sortedEntries(unitMap)[0];
+  const gc = filteredData.filter(r => { const v = getField(r,'Good Catch','GoodCatch').toLowerCase(); return v==='yes'||v==='نعم'||v==='true'||v==='1'; }).length;
+  const gcRate = Math.round(gc/total*100);
+  const pharm = filteredData.filter(r => getFacility(r).toLowerCase().includes('pharmacy')).length;
+  const noHarm = filteredData.filter(r => { const v = getField(r,'Incident Level of Harm','Level of Harm','LevelOfHarm').toLowerCase(); return v.includes('no harm')||v.includes('near miss'); }).length;
+
+  const insights = [
+    `إجمالي التقارير المحللة: <strong>${total}</strong> تقرير`,
+    topCat ? `الفئة الأكثر تكراراً: <strong>${topCat[0]}</strong> بواقع ${topCat[1]} حادثة (${Math.round(topCat[1]/total*100)}%)` : null,
+    topUnit ? `الوحدة الأكثر إبلاغاً: <strong>${topUnit[0]}</strong> بواقع ${topUnit[1]} تقرير` : null,
+    topMonth ? `أكثر شهر تبليغاً: <strong>${MONTH_NAMES_AR[parseInt(topMonth[0])]}</strong> بواقع ${topMonth[1]} تقرير` : null,
+    topRep ? `أكثر مُبلِّغ: <strong>${topRep[0]}</strong> — ${topRep[1]} تقرير` : null,
+    gcRate > 0 ? `معدل Good Catch: <strong>${gcRate}%</strong> من إجمالي التقارير` : null,
+    pharm > 0 ? `تقارير الصيدلية: <strong>${pharm}</strong> من أصل ${total} (${Math.round(pharm/total*100)}%)` : null,
+    noHarm > 0 ? `تقارير بدون ضرر أو قريبة من الخطأ (Near Miss): <strong>${noHarm}</strong>` : null,
+  ].filter(Boolean);
+
+  const issues = [], recs = [];
+  const harmMap = count(filteredData, r => getField(r,'Incident Level of Harm','Level of Harm','LevelOfHarm')||'Unknown');
+
+  if (topUnit && topUnit[1]/total > 0.3) {
+    issues.push(`الوحدة "${topUnit[0]}" تمثل أكثر من ${Math.round(topUnit[1]/total*100)}% من التقارير — تركيز غير طبيعي`);
+    recs.push(`مراجعة عمليات وحدة "${topUnit[0]}" وإجراء تدقيق داخلي`);
+  }
+  const severe = sortedEntries(harmMap).filter(([k]) => k.toLowerCase().includes('major')||k.toLowerCase().includes('catastrophic'));
+  if (severe.length && severe[0][1] > 0) {
+    issues.push(`وجود ${severe[0][1]} حادثة بمستوى ضرر "${severe[0][0]}" — تستوجب مراجعة فورية`);
+    recs.push('إجراء تحقيق معمق (RCA) لجميع الحوادث ذات الضرر الكبير أو الكارثي');
+  }
+  if (gcRate < 10 && total > 20) {
+    issues.push(`معدل Good Catch منخفض (${gcRate}%) — يُشير إلى ضعف ثقافة الإبلاغ الاستباقي`);
+    recs.push('تعزيز برامج تشجيع الإبلاغ الاستباقي وتحفيز الكوادر');
+  }
+  const openStatus = filteredData.filter(r => { const s = getField(r,'Status','Report Status').toLowerCase(); return s.includes('open')||s.includes('pending'); }).length;
+  if (openStatus > 0) {
+    issues.push(`يوجد ${openStatus} تقرير لا يزال في حالة مفتوحة / معلقة`);
+    recs.push('متابعة إغلاق التقارير المعلقة وتحديد مسؤول متابعة لكل قسم');
+  }
+  if (topCat && topCat[1]/total > 0.4) recs.push(`التركيز على خفض حوادث "${topCat[0]}" من خلال بروتوكول تحسين مخصص`);
+  recs.push('مشاركة نتائج هذا التقرير في اجتماع لجنة السلامة الشهري');
+  recs.push('استخدام بيانات الأشهر لتحديد موسمية الحوادث والتخطيط المسبق');
+  recs.push('مقارنة أداء الوحدات مع بعضها لتحديد أفضل الممارسات');
+
+  document.getElementById('insightsList').innerHTML = insights.map(i=>`<li>${i}</li>`).join('');
+  document.getElementById('issuesList').innerHTML = (issues.length?issues:['لم تُكتشف مشكلات بارزة في البيانات الحالية']).map(i=>`<li>${i}</li>`).join('');
+  document.getElementById('recsList').innerHTML = recs.map(i=>`<li>${i}</li>`).join('');
+}
+</script>
+</body>
+</html>
